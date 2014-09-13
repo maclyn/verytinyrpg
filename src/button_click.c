@@ -1,8 +1,9 @@
 #include <pebble.h>
 #include "button_click.h"
-#include "utils.c"
+#include "utils.h"
 
 //"State" enum so drawing layer knows what to do
+typedef enum game_state game_state;
 enum game_state {
   SHOWING_INTRO = 0,
   EXPLORING = 1,
@@ -28,7 +29,7 @@ static AppTimer *accel_timer;
 //Game state variables
 int score = 0;
 static char score_buffer[] = "Score: 000000";
-static char scene_elements[6][6];
+static int scene_elements[6][6];
 static elpos user_pos = {3, 3};
 
 static GBitmap *player_bmp;
@@ -36,7 +37,7 @@ static GBitmap *tree_bmp;
 static GFont main_font;
 
 //Arrays to hold the content of the levels
-enum game_state state = EXPLORING;
+game_state state = EXPLORING;
 
 //Update layer
 static void update_drawing_layer(struct Layer *layer, GContext *ctx){
@@ -110,9 +111,59 @@ static void window_unload(Window *window) {
 
 
 static void generate_level(){
+  //(1) Reset scene
   for(int i = 0; i < 6; i++){
     for(int j = 0; j < 6; j++){
-      scene_elements[i][j] = rand() % 2;
+      scene_elements[i][j] = -1;
+    }
+  }
+  
+  //(2) Calculate at least one clear path to another edge
+  //    from user position
+  int x_pos = user_pos.x;
+  int y_pos = user_pos.y;
+  scene_elements[x_pos][y_pos] = 0; //Make user pos empty
+  if(x_pos == 5){ //Get to x_pos = 0
+    while(x_pos != 0){
+      int y_wob = y_wobble(y_pos);
+      if(y_wob == 0){
+        --x_pos;  
+      }
+      y_pos += y_wob;
+      scene_elements[x_pos][y_pos] = 0;
+    }
+  } else if (x_pos == 0){ //Get to x_pos = 5
+    while(x_pos != 5){
+      int y_wob = y_wobble(y_pos);
+      if(y_wob == 0){
+        ++x_pos;  
+      }
+      y_pos += y_wob;
+      scene_elements[x_pos][y_pos] = 0;
+    }
+  } else if (y_pos == 5){ //Get to y_pos = 0
+    while(y_pos != 0){
+      int x_wob = x_wobble(x_pos);
+      if(x_wob == 0){
+        --y_pos;  
+      }
+      x_pos += x_wob;
+      scene_elements[x_pos][y_pos] = 0;
+    }
+  } else if (y_pos == 0){ //Get to x_pos = 5
+    while(y_pos != 5){
+      int x_wob = x_wobble(x_pos);
+      if(x_wob == 0){
+        ++y_pos;  
+      }
+      x_pos += x_wob;
+      scene_elements[x_pos][y_pos] = 0;
+    }
+  }
+  
+  for(int i = 0; i < 6; i++){
+    for(int j = 0; j < 6; j++){
+      if(scene_elements[i][j] == -1) scene_elements[i][j] = rand() % 2;
     }
   } 
 }
