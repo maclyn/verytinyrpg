@@ -1,0 +1,36 @@
+{
+    "appKeys": {},
+    "capabilities": [
+        ""
+    ],
+    "companyName": "maclyn@maclyn.me",
+    "longName": "A (Very) Tiny RPG",
+    "projectType": "native",
+    "resources": {
+        "media": [
+            {
+                "file": "images/sprite.png",
+                "name": "PLAYER_SPRITE",
+                "type": "png"
+            },
+            {
+                "file": "images/menu.png",
+                "menuIcon": true,
+                "name": "MENU_IMG",
+                "type": "png"
+            },
+            {
+                "file": "images/tree.png",
+                "name": "TREE_TILE",
+                "type": "png"
+            }
+        ]
+    },
+    "shortName": "Tiny RPG",
+    "uuid": "3f3573f4-a3e3-4307-8197-f337b12474e7",
+    "versionCode": 1,
+    "versionLabel": "1.0",
+    "watchapp": {
+        "watchface": false
+    }
+}
