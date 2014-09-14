@@ -1,26 +1,7 @@
 #include <pebble.h>
 #include "button_click.h"
 #include "utils.h"
-
-//"State" enum so drawing layer knows what to do
-typedef enum game_state game_state;
-enum game_state {
-  SHOWING_INTRO = 0,
-  EXPLORING = 1,
-  IN_BATTLE = 2
-};
-
-//Element enum defining the different elements that can be drawn
-enum element_type {
-  BLANK = 0,
-  TREE = 1
-};
-
-typedef struct elpos elpos;
-struct elpos{
-  char x;
-  char y;
-};
+#include "structs.h"
 
 static Window *window;
 static Layer *main_layer;
@@ -29,11 +10,13 @@ static AppTimer *accel_timer;
 //Game state variables
 int score = 0;
 static char score_buffer[] = "Score: 000000";
+
 static int scene_elements[6][6];
 static elpos user_pos = {3, 3};
 
 static GBitmap *player_bmp;
 static GBitmap *tree_bmp;
+static GBitmap *grass_bmp;
 static GFont main_font;
 
 //Arrays to hold the content of the levels
@@ -60,6 +43,8 @@ static void update_drawing_layer(struct Layer *layer, GContext *ctx){
           
         } else if (type == TREE){
           graphics_draw_bitmap_in_rect(ctx, tree_bmp, GRect(i * 24, ((j * 24) + 24), 24, 24));
+        } else if (type == GRASS){
+          graphics_draw_bitmap_in_rect(ctx, grass_bmp, GRect(i * 24, ((j * 24) + 24), 24, 24));
         }
       }
     }
@@ -94,6 +79,7 @@ static void window_load(Window *window) {
   GRect bounds = layer_get_bounds(window_layer);
 
   tree_bmp = gbitmap_create_with_resource(RESOURCE_ID_TREE_TILE);
+  grass_bmp = gbitmap_create_with_resource(RESOURCE_ID_GRASS_TILE);
   player_bmp = gbitmap_create_with_resource(RESOURCE_ID_PLAYER_SPRITE);
   main_font = fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD);
   
@@ -106,6 +92,7 @@ static void window_load(Window *window) {
 static void window_unload(Window *window) {
   gbitmap_destroy(tree_bmp);
   gbitmap_destroy(player_bmp);
+  gbitmap_destroy(grass_bmp);
   layer_destroy(main_layer);
 }
 
@@ -161,33 +148,30 @@ static void generate_level(){
     }
   }
   
+  //For the rest of the field, randomly generate elements
   for(int i = 0; i < 6; i++){
     for(int j = 0; j < 6; j++){
-      if(scene_elements[i][j] == -1) scene_elements[i][j] = rand() % 2;
+      if(scene_elements[i][j] == -1) scene_elements[i][j] = rand() % 3;
     }
   } 
 }
 
-//Manage moving the user
-static void accelerometer_check(void *nodata){
-  AccelData data;
-  accel_service_peek(&data);
+static void move_user(int x, int y){
+  int xPos = x;
+  int yPos = y;
   
-  //Get data values if in valid state
-  if(!data.did_vibrate && state == EXPLORING){
-    int xPos = data.x;
-    int yPos = data.y;
+  if(state == EXPLORING){
     if(abs(xPos) > abs(yPos)){ //Take x action
       if(xPos > 400){ //Right
         if(user_pos.x < 5){
-          ++user_pos.x;
+          if(!is_hard(scene_elements[user_pos.x+1][user_pos.y])) ++user_pos.x;
         } else { //Level to the right
           user_pos.x = 0;
           generate_level();
         }
       } else if (xPos < -400){ //Left
         if(user_pos.x > 0){
-          --user_pos.x;
+          if(!is_hard(scene_elements[user_pos.x-1][user_pos.y])) --user_pos.x;
         } else {
           user_pos.x = 5;
           generate_level();
@@ -196,14 +180,14 @@ static void accelerometer_check(void *nodata){
     } else { //Take y action
       if(yPos < -400){ //Down
         if(user_pos.y < 5){
-          ++user_pos.y;
+          if(!is_hard(scene_elements[user_pos.x][user_pos.y+1])) ++user_pos.y;
         } else {
           user_pos.y = 0;
           generate_level();
         }         
       } else if (yPos > 400){ //Up
         if(user_pos.y > 0){
-          --user_pos.y;
+          if(!is_hard(scene_elements[++user_pos.x][user_pos.y-1])) --user_pos.y;
         } else {
           user_pos.y = 5;
           generate_level();
@@ -213,6 +197,18 @@ static void accelerometer_check(void *nodata){
   }
   
   layer_mark_dirty(main_layer);
+}
+
+//Manage moving the user
+static void accelerometer_check(void *nodata){
+  AccelData data;
+  accel_service_peek(&data);
+  
+  //Get data values if in valid state
+  if(!data.did_vibrate){
+    move_user(data.x, data.y);
+  }
+  
   register_accel_timer();
 }
 

@@ -1,5 +1,6 @@
 #include <pebble.h>
 #include "utils.h"
+#include "structs.h"
 
 int x_wobble(int start_val){
   int wobble_amount = rand() % 3;
@@ -37,4 +38,11 @@ int y_wobble(int start_val){
       return 0;
     }
   }
+}
+
+int is_hard(element_type element){
+  if(element == TREE){
+    return 1;
+  }
+  return 0;
 }
