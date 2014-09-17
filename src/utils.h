@@ -4,4 +4,4 @@
   
 int x_wobble(int start_val);
 int y_wobble(int start_val);
-int is_hard(element_type element);
+int is_solid(element_type element);

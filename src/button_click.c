@@ -10,6 +10,7 @@ static AppTimer *accel_timer;
 //Game state variables
 int score = 0;
 static char score_buffer[] = "Score: 000000";
+static char hp_buffer[] = "xxx/xxx";
 
 static int scene_elements[6][6];
 static elpos user_pos = {3, 3};
@@ -17,10 +18,14 @@ static elpos user_pos = {3, 3};
 static GBitmap *player_bmp;
 static GBitmap *tree_bmp;
 static GBitmap *grass_bmp;
+static GBitmap *enemy_bmp;
 static GFont main_font;
 
 //Arrays to hold the content of the levels
-game_state state = EXPLORING;
+game_state state = INTRO;
+enemy_state battle_enemy = { "Unknown", 100, 100 };
+
+char* welcome_text;
 
 //Update layer
 static void update_drawing_layer(struct Layer *layer, GContext *ctx){
@@ -51,8 +56,20 @@ static void update_drawing_layer(struct Layer *layer, GContext *ctx){
     
     //Draw the player on top
     graphics_draw_bitmap_in_rect(ctx, player_bmp, GRect(user_pos.x * 24, user_pos.y * 24 + 24, 24, 24));
-  } else if (state == SHOWING_INTRO) {
-  } else if (state == IN_BATTLE) {
+  } else if (state == INTRO) {
+    graphics_draw_text(ctx, welcome_text, main_font, GRect(2, 70, 140, 18), GTextAlignmentCenter, GTextOverflowModeTrailingEllipsis, NULL);
+  } else if (state == BATTLE) {
+    //Draw state in top 24 pixels
+    graphics_draw_rect(ctx, GRect(-1, 0, 145, 24));
+    graphics_draw_text(ctx, "Battle Mode", main_font, GRect(2, 0, 140, 18), GTextAlignmentCenter, GTextOverflowModeTrailingEllipsis, NULL);
+    
+    //Draw enemy bmp + health + name
+    graphics_draw_bitmap_in_rect(ctx, enemy_bmp, GRect(2, 32, 64, 48));
+    snprintf(hp_buffer, sizeof(hp_buffer), "%d/%d", battle_enemy.hp, battle_enemy.max_hp);
+    graphics_draw_text(ctx, hp_buffer, main_font, GRect(68, 47, 76, 18),
+                       GTextAlignmentLeft, GTextOverflowModeTrailingEllipsis, NULL);
+    graphics_draw_text(ctx, battle_enemy.name, main_font, GRect(2, 90, 140, 18),
+                       GTextAlignmentLeft, GTextOverflowModeTrailingEllipsis, NULL);
   }
 }
 
@@ -151,7 +168,7 @@ static void generate_level(){
   //For the rest of the field, randomly generate elements
   for(int i = 0; i < 6; i++){
     for(int j = 0; j < 6; j++){
-      if(scene_elements[i][j] == -1) scene_elements[i][j] = rand() % 3;
+      if(scene_elements[i][j] == -1) scene_elements[i][j] = rand() % NUM_ELEMENTS;
     }
   } 
 }
@@ -164,14 +181,18 @@ static void move_user(int x, int y){
     if(abs(xPos) > abs(yPos)){ //Take x action
       if(xPos > 400){ //Right
         if(user_pos.x < 5){
-          if(!is_hard(scene_elements[user_pos.x+1][user_pos.y])) ++user_pos.x;
+          if(!is_solid(scene_elements[user_pos.x+1][user_pos.y])){
+            ++user_pos.x;
+          }
         } else { //Level to the right
           user_pos.x = 0;
           generate_level();
         }
       } else if (xPos < -400){ //Left
         if(user_pos.x > 0){
-          if(!is_hard(scene_elements[user_pos.x-1][user_pos.y])) --user_pos.x;
+          if(!is_solid(scene_elements[user_pos.x-1][user_pos.y])){
+            --user_pos.x;
+          }
         } else {
           user_pos.x = 5;
           generate_level();
@@ -180,23 +201,60 @@ static void move_user(int x, int y){
     } else { //Take y action
       if(yPos < -400){ //Down
         if(user_pos.y < 5){
-          if(!is_hard(scene_elements[user_pos.x][user_pos.y+1])) ++user_pos.y;
+          if(!is_solid(scene_elements[user_pos.x][user_pos.y+1])){
+            ++user_pos.y;
+          }
         } else {
           user_pos.y = 0;
           generate_level();
         }         
       } else if (yPos > 400){ //Up
         if(user_pos.y > 0){
-          if(!is_hard(scene_elements[++user_pos.x][user_pos.y-1])) --user_pos.y;
+          if(!is_solid(scene_elements[++user_pos.x][user_pos.y-1])){
+            --user_pos.y;
+          }
         } else {
           user_pos.y = 5;
           generate_level();
         }
       }
     }
+    
+    //Run collision checks
+    int type = scene_elements[user_pos.x][user_pos.y];
+    switch(type){
+     case GRASS: //Potential battle
+      enter_battle();
+      break;
+    }
   }
   
   layer_mark_dirty(main_layer);
+}
+
+static void enter_battle(){
+  if(rand() % 8 == 1){ //Randomly enter the battles
+    //Set state
+    state = BATTLE;
+    
+    //Set enemy
+    int enemy = SPIDER; //only one for now
+    int resource_to_load; 
+    switch(enemy){
+      case SPIDER:
+        battle_enemy.name = "Spider";
+        battle_enemy.hp = 100;
+        battle_enemy.max_hp = 100;
+        resource_to_load = RESOURCE_ID_SPIDER_SPRITE;
+        break;
+    }
+    
+    enemy_bmp = gbitmap_create_with_resource(resource_to_load);
+  }
+}
+
+static void leave_battle(){
+  gbitmap_destroy(enemy_bmp);
 }
 
 //Manage moving the user
@@ -214,7 +272,18 @@ static void accelerometer_check(void *nodata){
 
 //Update position every second
 static void register_accel_timer(){
-  app_timer_register(1000, accelerometer_check, NULL);
+  app_timer_register(750, accelerometer_check, NULL);
+}
+
+static void show_intro(char* text){
+  welcome_text = text;
+  layer_mark_dirty(main_layer);
+  app_timer_register(2000, hide_intro, NULL);
+}
+
+static void hide_intro(void *nodata){
+  state = EXPLORING;
+  generate_level();
 }
 
 //-------------------------------
@@ -234,7 +303,7 @@ static void init(void) {
   //Generate level
   //Seed random generator
   srand(time(NULL));
-  generate_level();
+  show_intro("FOREST");
   
   //Schedule acceleromter updates
   accel_data_service_subscribe(0, NULL);
