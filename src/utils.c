@@ -46,3 +46,24 @@ int is_solid(element_type element){
   }
   return 0;
 }
+
+char* attack_to_string(attack atk){
+  switch(atk){
+    case NONE:
+      return "---";
+      break;
+    case SWORD:
+      return "Sword";
+      break;
+  }
+  return "Error";
+}
+
+char* item_to_string(item itm){
+  switch(itm){
+    case NO_ITEM:
+      return "---";
+      break;
+  }
+  return "Error";
+}

@@ -10,7 +10,8 @@ static AppTimer *accel_timer;
 //Game state variables
 int score = 0;
 static char score_buffer[] = "Score: 000000";
-static char hp_buffer[] = "xxx/xxx";
+static char enemy_hp_buffer[] = "En:xxx/xxx";
+static char player_hp_buffer[] = "Pl:xxx/xxx";
 
 static int scene_elements[6][6];
 static elpos user_pos = {3, 3};
@@ -23,7 +24,9 @@ static GFont main_font;
 
 //Arrays to hold the content of the levels
 game_state state = INTRO;
-enemy_state battle_enemy = { "Unknown", 100, 100 };
+enemy_state battle_enemy = { "Unknown", 100, 100, 2, 5 };
+player_state player = { 100, 100, SWORD, NONE, NONE, NO_ITEM, NO_ITEM, NO_ITEM };
+menu_state menu_level = MAIN;
 
 char* welcome_text;
 
@@ -63,26 +66,135 @@ static void update_drawing_layer(struct Layer *layer, GContext *ctx){
     graphics_draw_rect(ctx, GRect(-1, 0, 145, 24));
     graphics_draw_text(ctx, "Battle Mode", main_font, GRect(2, 0, 140, 18), GTextAlignmentCenter, GTextOverflowModeTrailingEllipsis, NULL);
     
-    //Draw enemy bmp + health + name
+    //Draw enemy bmp + health (of player + enemy) + name
     graphics_draw_bitmap_in_rect(ctx, enemy_bmp, GRect(2, 32, 64, 48));
-    snprintf(hp_buffer, sizeof(hp_buffer), "%d/%d", battle_enemy.hp, battle_enemy.max_hp);
-    graphics_draw_text(ctx, hp_buffer, main_font, GRect(68, 47, 76, 18),
+    snprintf(enemy_hp_buffer, sizeof(enemy_hp_buffer), "En:%d/%d", battle_enemy.hp, battle_enemy.max_hp);
+    graphics_draw_text(ctx, enemy_hp_buffer, main_font, GRect(68, 36, 76, 18),
                        GTextAlignmentLeft, GTextOverflowModeTrailingEllipsis, NULL);
-    graphics_draw_text(ctx, battle_enemy.name, main_font, GRect(2, 90, 140, 18),
+    snprintf(player_hp_buffer, sizeof(enemy_hp_buffer), "Pl:%d/%d", player.hp, player.max_hp);
+    graphics_draw_text(ctx, player_hp_buffer, main_font, GRect(68, 58, 76, 18),
+                       GTextAlignmentLeft, GTextOverflowModeTrailingEllipsis, NULL);
+    graphics_draw_text(ctx, battle_enemy.name, main_font, GRect(2, 85, 140, 18),
+                       GTextAlignmentLeft, GTextOverflowModeTrailingEllipsis, NULL);
+    
+    //Draw menu options based on menu state
+    char* line1 = "";
+    char* line2 = "";
+    char* line3 = "";
+    switch(menu_level){
+      case MAIN:
+        line1 = "Attack";
+        line2 = "Item";
+        line3 = "Run";
+        break;
+      case ATTACKS:
+        line1 = attack_to_string(player.attack_1);
+        line2 = attack_to_string(player.attack_2);
+        line3 = attack_to_string(player.attack_3);
+        break;
+      case ITEMS:
+        line1 = item_to_string(player.item_1);
+        line2 = item_to_string(player.item_2);
+        line3 = item_to_string(player.item_3);
+        break;
+    }
+    graphics_draw_text(ctx, line1, main_font, GRect(2, 108, 140, 18),
+                       GTextAlignmentLeft, GTextOverflowModeTrailingEllipsis, NULL);
+    graphics_draw_text(ctx, line2, main_font, GRect(2, 128, 140, 18),
+                       GTextAlignmentLeft, GTextOverflowModeTrailingEllipsis, NULL);
+    graphics_draw_text(ctx, line3, main_font, GRect(2, 148, 140, 18),
                        GTextAlignmentLeft, GTextOverflowModeTrailingEllipsis, NULL);
   }
 }
 
+static void attack_with(attack a){
+  int min_to_subtract = 5;
+  int max_to_subtract = 10;
+  switch(a){
+    case SWORD: 
+      min_to_subtract = 15;
+      max_to_subtract = 25;
+      break;
+    case NONE:
+      break;
+  }
+  
+  int difference = max_to_subtract - min_to_subtract;
+  int result = min_to_subtract + ((int)((float)(rand() % 5) * (float)difference));
+  battle_enemy.hp -= result;
+  enemy_turn();
+}
+
+static void use_item(item i){
+  
+}
+
+static void enemy_turn(){
+
+}
+
 //Indicates select click
 static void select_click_handler(ClickRecognizerRef recognizer, void *context) {
+  if(state == BATTLE){
+    switch(menu_level){
+      case MAIN:
+        menu_level = ITEMS;
+        break;
+      case ATTACKS:
+        attack_with(player.attack_2);
+        break;
+      case ITEMS:
+        use_item(player.item_3);
+        break;
+    }
+  }
+  
+  layer_mark_dirty(main_layer);
 }
 
 //Indicates up click
 static void up_click_handler(ClickRecognizerRef recognizer, void *context) {
+  if(state == BATTLE){
+    switch(menu_level){
+      case MAIN:
+        menu_level = ATTACKS;
+        break;
+      case ATTACKS:
+        attack_with(player.attack_1);
+        break;
+      case ITEMS:
+        use_item(player.item_1);
+        break;
+    }
+  }
+  
+  layer_mark_dirty(main_layer);
 }
 
 //Indicates down click
 static void down_click_handler(ClickRecognizerRef recognizer, void *context) {
+  if(state == BATTLE){
+    int should_leave;
+    switch(menu_level){
+      case MAIN:
+        should_leave = rand() % 4;
+        if(should_leave){
+          leave_battle();
+        } else {
+          player.hp -= 10;
+        }
+        layer_mark_dirty(main_layer);
+        break;
+      case ATTACKS:
+        attack_with(player.attack_3);
+        break;
+      case ITEMS:
+        use_item(player.item_3);
+        break;
+    }
+  }
+  
+  layer_mark_dirty(main_layer);
 }
 
 static void click_config_provider(void *context) {
@@ -233,7 +345,7 @@ static void move_user(int x, int y){
 }
 
 static void enter_battle(){
-  if(rand() % 8 == 1){ //Randomly enter the battles
+  if(rand() % 2 == 1){ //Randomly enter the battles
     //Set state
     state = BATTLE;
     
@@ -245,15 +357,20 @@ static void enter_battle(){
         battle_enemy.name = "Spider";
         battle_enemy.hp = 100;
         battle_enemy.max_hp = 100;
+        battle_enemy.min_attack = 2;
+        battle_enemy.max_attack = 10;
         resource_to_load = RESOURCE_ID_SPIDER_SPRITE;
         break;
     }
     
     enemy_bmp = gbitmap_create_with_resource(resource_to_load);
+    menu_level = MAIN;
   }
 }
 
 static void leave_battle(){
+  state = EXPLORING;
+  layer_mark_dirty(main_layer);
   gbitmap_destroy(enemy_bmp);
 }
 
@@ -273,6 +390,27 @@ static void accelerometer_check(void *nodata){
 //Update position every second
 static void register_accel_timer(){
   app_timer_register(750, accelerometer_check, NULL);
+}
+
+//Check menu back
+static void register_check_timer(){
+  app_timer_register(200, check_menu_back, NULL);
+}
+
+//Check menu state
+static void check_menu_back(void *nodata){
+  if(state == BATTLE){
+    AccelData data;
+    accel_service_peek(&data);
+    if(data.x < -400){ //Back
+      if(menu_level == ATTACKS || menu_level == ITEMS){
+        menu_level = MAIN;
+      }
+    }
+  }
+  
+  layer_mark_dirty(main_layer);
+  register_check_timer();
 }
 
 static void show_intro(char* text){
@@ -308,6 +446,7 @@ static void init(void) {
   //Schedule acceleromter updates
   accel_data_service_subscribe(0, NULL);
   register_accel_timer();
+  register_check_timer();
 }
 
 static void deinit(void) {

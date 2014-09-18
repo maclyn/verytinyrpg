@@ -10,6 +10,32 @@ enum game_state {
   BATTLE = 2
 };
 
+//Where in the menu we are (defines what we should draw to it)
+typedef enum menu_state menu_state;
+enum menu_state{
+  MAIN = 0,
+  ATTACKS = 1,
+  ITEMS = 2
+};
+
+//Define the options for enemies
+typedef enum enemy enemy;
+enum enemy {
+  SPIDER = 0
+};
+
+//Define the options for attacks
+typedef enum attack attack;
+enum attack {
+  NONE = 0,
+  SWORD = 1
+};
+
+typedef enum item item;
+enum item {
+  NO_ITEM = 0,
+};
+
 //Element enum defining the different elements that can be drawn
 typedef enum element_type element_type;
 enum element_type {
@@ -24,14 +50,23 @@ struct elpos{
   short y;
 };
 
-typedef enum enemy enemy;
-enum enemy {
-  SPIDER = 0
-};
-
 typedef struct enemy_state enemy_state;
 struct enemy_state{
   char* name;
   short hp;
   short max_hp;
+  short min_attack;
+  short max_attack;
+};
+
+typedef struct player_state player_state;
+struct player_state{
+  short hp;
+  short max_hp;
+  attack attack_1;
+  attack attack_2;
+  attack attack_3;
+  item item_1;
+  item item_2;
+  item item_3;
 };
