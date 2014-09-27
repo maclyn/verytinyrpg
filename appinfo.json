@@ -9,6 +9,11 @@
     "resources": {
         "media": [
             {
+                "file": "images/tree_monster.png",
+                "name": "TREE_MONSTER_SPRITE",
+                "type": "png"
+            },
+            {
                 "file": "images/spider_monster.png",
                 "name": "SPIDER_SPRITE",
                 "type": "png"

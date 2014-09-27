@@ -10,9 +10,13 @@ static AppTimer *accel_timer;
 //Game state variables
 int score = 0;
 static char score_buffer[] = "Score: 000000";
-static char enemy_hp_buffer[] = "En:xxx/xxx";
-static char player_hp_buffer[] = "Pl:xxx/xxx";
-
+static char enemy_hp_buffer[] = "EN:xxx/xxx";
+static char player_hp_buffer[] = "PL:xxx/xxx";
+static char exp_buffer[] = "EXP:xxxx";
+static char money_buffer[] = "$$$:xxxx";
+static char num_attacks_buffer[] = "x Attack(s)";
+static char num_items_buffer[] = "x Item(s)";
+  
 static int scene_elements[6][6];
 static elpos user_pos = {3, 3};
 
@@ -21,14 +25,20 @@ static GBitmap *tree_bmp;
 static GBitmap *grass_bmp;
 static GBitmap *enemy_bmp;
 static GFont main_font;
+static GFont bold_font;
 
 //Arrays to hold the content of the levels
 game_state state = INTRO;
 enemy_state battle_enemy = { "Unknown", 100, 100, 2, 5 };
-player_state player = { 100, 100, SWORD, NONE, NONE, NO_ITEM, NO_ITEM, NO_ITEM };
+player_state player = { 100, 100, 0, 0,SWORD, NONE, NONE, NO_ITEM, NO_ITEM, NO_ITEM };
 menu_state menu_level = MAIN;
 
 char* welcome_text;
+int is_paused = 0; //Paused also shows status
+
+//Persistent storage keys
+const int SCORE_KEY = 0;
+const int PLAYER_KEY = 1;
 
 //Update layer
 static void update_drawing_layer(struct Layer *layer, GContext *ctx){
@@ -37,11 +47,41 @@ static void update_drawing_layer(struct Layer *layer, GContext *ctx){
   graphics_context_set_text_color(ctx, GColorBlack);
   graphics_context_set_fill_color(ctx, GColorBlack);
   
-  if(state == EXPLORING){
+  if(state == INTRO){
+    graphics_draw_text(ctx, welcome_text, bold_font, GRect(2, 70, 140, 18), GTextAlignmentCenter, GTextOverflowModeTrailingEllipsis, NULL);
+  } else if (state == EXPLORING && is_paused) { //Draw a status screen
+    //Print overview
+    graphics_draw_text(ctx, "PAUSED", bold_font, GRect(2, 2, 140, 18), GTextAlignmentRight, GTextOverflowModeTrailingEllipsis, NULL);
+    //TODO: Set up worlds
+    graphics_draw_text(ctx, "Forest World", main_font, GRect(2, 22, 140, 18), GTextAlignmentRight, GTextOverflowModeTrailingEllipsis, NULL);
+    
+    //Print player stats (HP, Exp, and $$$)
+    snprintf(player_hp_buffer, sizeof(player_hp_buffer), "HP:%d/%d", player.hp, player.max_hp);
+    graphics_draw_text(ctx, player_hp_buffer, main_font, GRect(2, 42, 140, 18), GTextAlignmentRight, GTextOverflowModeTrailingEllipsis, NULL);
+    snprintf(exp_buffer, sizeof(exp_buffer), "EXP:%d", player.exp);
+    graphics_draw_text(ctx, exp_buffer, main_font, GRect(2, 62, 140, 18), GTextAlignmentRight, GTextOverflowModeTrailingEllipsis, NULL);
+    snprintf(money_buffer, sizeof(money_buffer), "$$$:%d", player.money);
+    graphics_draw_text(ctx, money_buffer, main_font, GRect(2, 82, 140, 18), GTextAlignmentRight, GTextOverflowModeTrailingEllipsis, NULL);
+    
+    //Print items/attacks owned
+    int atk_cnt = 0;
+    if(player.attack_1 != NONE) atk_cnt++;
+    if(player.attack_2 != NONE) atk_cnt++;
+    if(player.attack_3 != NONE) atk_cnt++;
+    int item_cnt = 0;
+    if(player.item_1 != NO_ITEM) item_cnt++;
+    if(player.item_2 != NO_ITEM) item_cnt++;
+    if(player.item_3 != NO_ITEM) item_cnt++;
+    
+    snprintf(num_attacks_buffer, sizeof(num_attacks_buffer), "%d Attack(s)", atk_cnt);
+    graphics_draw_text(ctx, num_attacks_buffer, main_font, GRect(2, 102, 140, 18), GTextAlignmentRight, GTextOverflowModeTrailingEllipsis, NULL);
+    snprintf(num_items_buffer, sizeof(num_items_buffer), "%d Item(s)", item_cnt);
+    graphics_draw_text(ctx, num_items_buffer, main_font, GRect(2, 122, 140, 18), GTextAlignmentRight, GTextOverflowModeTrailingEllipsis, NULL);
+  } else if (state == EXPLORING) {
     //Draw score in top 24 pixels
     graphics_draw_rect(ctx, GRect(-1, 0, 145, 24));
     snprintf(score_buffer, sizeof(score_buffer), "Score: %d", score);
-    graphics_draw_text(ctx, score_buffer, main_font, GRect(2, 0, 140, 18), GTextAlignmentRight, GTextOverflowModeTrailingEllipsis, NULL);
+    graphics_draw_text(ctx, score_buffer, bold_font, GRect(2, 0, 140, 18), GTextAlignmentRight, GTextOverflowModeTrailingEllipsis, NULL);
   
     //Draw the scenery
     for(int i = 0; i < 6; i++){
@@ -59,23 +99,26 @@ static void update_drawing_layer(struct Layer *layer, GContext *ctx){
     
     //Draw the player on top
     graphics_draw_bitmap_in_rect(ctx, player_bmp, GRect(user_pos.x * 24, user_pos.y * 24 + 24, 24, 24));
-  } else if (state == INTRO) {
-    graphics_draw_text(ctx, welcome_text, main_font, GRect(2, 70, 140, 18), GTextAlignmentCenter, GTextOverflowModeTrailingEllipsis, NULL);
   } else if (state == BATTLE) {
     //Draw state in top 24 pixels
     graphics_draw_rect(ctx, GRect(-1, 0, 145, 24));
-    graphics_draw_text(ctx, "Battle Mode", main_font, GRect(2, 0, 140, 18), GTextAlignmentCenter, GTextOverflowModeTrailingEllipsis, NULL);
+    graphics_draw_text(ctx, "Battle Mode", bold_font, GRect(2, 0, 140, 18), GTextAlignmentCenter, GTextOverflowModeTrailingEllipsis, NULL);
     
     //Draw enemy bmp + health (of player + enemy) + name
     graphics_draw_bitmap_in_rect(ctx, enemy_bmp, GRect(2, 32, 64, 48));
     snprintf(enemy_hp_buffer, sizeof(enemy_hp_buffer), "En:%d/%d", battle_enemy.hp, battle_enemy.max_hp);
     graphics_draw_text(ctx, enemy_hp_buffer, main_font, GRect(68, 36, 76, 18),
                        GTextAlignmentLeft, GTextOverflowModeTrailingEllipsis, NULL);
-    snprintf(player_hp_buffer, sizeof(enemy_hp_buffer), "Pl:%d/%d", player.hp, player.max_hp);
+    snprintf(player_hp_buffer, sizeof(player_hp_buffer), "Pl:%d/%d", player.hp, player.max_hp);
     graphics_draw_text(ctx, player_hp_buffer, main_font, GRect(68, 58, 76, 18),
                        GTextAlignmentLeft, GTextOverflowModeTrailingEllipsis, NULL);
-    graphics_draw_text(ctx, battle_enemy.name, main_font, GRect(2, 85, 140, 18),
+    //Line above enemy name
+    graphics_draw_line(ctx, GPoint(0, 83), GPoint(144, 83));
+    //Actual name
+    graphics_draw_text(ctx, battle_enemy.name, bold_font, GRect(2, 85, 140, 18),
                        GTextAlignmentLeft, GTextOverflowModeTrailingEllipsis, NULL);
+    //Line below enemy name
+    graphics_draw_line(ctx, GPoint(0, 105), GPoint(144, 105));
     
     //Draw menu options based on menu state
     char* line1 = "";
@@ -120,9 +163,16 @@ static void attack_with(attack a){
   }
   
   int difference = max_to_subtract - min_to_subtract;
-  int result = min_to_subtract + ((int)((float)(rand() % 5) * (float)difference));
+  int result = min_to_subtract + (((float)(rand() % 5) / 4.0f) * ((float)(difference)));
   battle_enemy.hp -= result;
-  enemy_turn();
+  if(battle_enemy.hp < 1){
+    score += battle_enemy.max_attack * 2; //Add to score "difficulty" of enemy [enemy.max_attack * 2]
+    player.hp += 20; //Recover some health
+    if(player.hp > player.max_hp) player.hp = player.max_hp; //Cap hp at max hp
+    leave_battle();
+  } else {
+    enemy_turn();
+  }
 }
 
 static void use_item(item i){
@@ -130,7 +180,15 @@ static void use_item(item i){
 }
 
 static void enemy_turn(){
-
+  int min_to_subtract = battle_enemy.min_attack;
+  int max_to_subtract = battle_enemy.max_attack;
+  
+  int difference = max_to_subtract - min_to_subtract;
+  int result = min_to_subtract + (((float)(rand() % 5) / 4.0f) * ((float)(difference)));
+  player.hp -= result;
+  if(player.hp < 0){
+    //Lose
+  }
 }
 
 //Indicates select click
@@ -142,11 +200,15 @@ static void select_click_handler(ClickRecognizerRef recognizer, void *context) {
         break;
       case ATTACKS:
         attack_with(player.attack_2);
+        menu_level = MAIN;
         break;
       case ITEMS:
         use_item(player.item_3);
+        menu_level = MAIN;
         break;
     }
+  } else if (state == EXPLORING) { //Pause on select
+    is_paused = !is_paused;
   }
   
   layer_mark_dirty(main_layer);
@@ -161,9 +223,11 @@ static void up_click_handler(ClickRecognizerRef recognizer, void *context) {
         break;
       case ATTACKS:
         attack_with(player.attack_1);
+        menu_level = MAIN;
         break;
       case ITEMS:
         use_item(player.item_1);
+        menu_level = MAIN;
         break;
     }
   }
@@ -187,9 +251,11 @@ static void down_click_handler(ClickRecognizerRef recognizer, void *context) {
         break;
       case ATTACKS:
         attack_with(player.attack_3);
+        menu_level = MAIN;
         break;
       case ITEMS:
         use_item(player.item_3);
+        menu_level = MAIN;
         break;
     }
   }
@@ -210,7 +276,8 @@ static void window_load(Window *window) {
   tree_bmp = gbitmap_create_with_resource(RESOURCE_ID_TREE_TILE);
   grass_bmp = gbitmap_create_with_resource(RESOURCE_ID_GRASS_TILE);
   player_bmp = gbitmap_create_with_resource(RESOURCE_ID_PLAYER_SPRITE);
-  main_font = fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD);
+  main_font = fonts_get_system_font(FONT_KEY_GOTHIC_18);
+  bold_font = fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD);
   
   //Create bitmap layer
   main_layer = layer_create(bounds);
@@ -289,7 +356,7 @@ static void move_user(int x, int y){
   int xPos = x;
   int yPos = y;
   
-  if(state == EXPLORING){
+  if(state == EXPLORING && !is_paused){
     if(abs(xPos) > abs(yPos)){ //Take x action
       if(xPos > 400){ //Right
         if(user_pos.x < 5){
@@ -350,7 +417,7 @@ static void enter_battle(){
     state = BATTLE;
     
     //Set enemy
-    int enemy = SPIDER; //only one for now
+    int enemy = rand() % NUM_ENEMIES; //only one for now
     int resource_to_load; 
     switch(enemy){
       case SPIDER:
@@ -358,8 +425,16 @@ static void enter_battle(){
         battle_enemy.hp = 100;
         battle_enemy.max_hp = 100;
         battle_enemy.min_attack = 2;
-        battle_enemy.max_attack = 10;
+        battle_enemy.max_attack = 5;
         resource_to_load = RESOURCE_ID_SPIDER_SPRITE;
+        break;
+      case TREE_MONSTER:
+        battle_enemy.name = "Tree Monster";
+        battle_enemy.hp = 120;
+        battle_enemy.max_hp = 120;
+        battle_enemy.min_attack = 1;
+        battle_enemy.max_attack = 10;
+        resource_to_load = RESOURCE_ID_TREE_MONSTER_SPRITE;
         break;
     }
     
@@ -429,6 +504,12 @@ static void hide_intro(void *nodata){
 //-------------------------------
 
 static void init(void) {
+  //Read player data
+  score = persist_exists(SCORE_KEY) ? persist_read_int(SCORE_KEY) : score;
+  if(persist_exists(PLAYER_KEY)){
+    persist_read_data(PLAYER_KEY, &player, sizeof(player));
+  }
+  
   window = window_create();
   window_set_fullscreen(window, true);
   window_set_click_config_provider(window, click_config_provider);
@@ -452,6 +533,10 @@ static void init(void) {
 static void deinit(void) {
   window_destroy(window);
   accel_data_service_unsubscribe();
+  
+  //Save player data
+  persist_write_data(PLAYER_KEY, &player, sizeof(player));
+  persist_write_int(SCORE_KEY, score);
 }
 
 int main(void) {

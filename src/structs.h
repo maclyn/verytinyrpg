@@ -10,7 +10,9 @@ enum game_state {
   BATTLE = 2
 };
 
-//Where in the menu we are (defines what we should draw to it)
+//Where in the battle menu we are
+//Every other menu is one/two levels and 
+//status can be represented by a boolean value
 typedef enum menu_state menu_state;
 enum menu_state{
   MAIN = 0,
@@ -21,7 +23,8 @@ enum menu_state{
 //Define the options for enemies
 typedef enum enemy enemy;
 enum enemy {
-  SPIDER = 0
+  SPIDER = 0,
+  TREE_MONSTER = 1
 };
 
 //Define the options for attacks
@@ -63,6 +66,8 @@ typedef struct player_state player_state;
 struct player_state{
   short hp;
   short max_hp;
+  short exp;
+  short money;
   attack attack_1;
   attack attack_2;
   attack attack_3;
